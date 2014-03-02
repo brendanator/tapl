@@ -1,0 +1,10 @@
+name:                arith
+version:             0.1.0.0
+synopsis:            Implementation of arithmetic expressions from Types and Programming Languages
+build-type:          Simple
+cabal-version:       >=1.8
+
+executable arith
+  main-is:          arith.hs
+  -- other-modules:       
+  build-depends:       base == 4.6.*, parsec >= 3.1
