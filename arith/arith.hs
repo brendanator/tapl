@@ -1,5 +1,5 @@
-import Control.Monad  
-import System.Environment   
+import Control.Monad (forM)
+import System.Environment (getArgs)
 import Text.ParserCombinators.Parsec
 
 data Term = TmTrue
@@ -16,7 +16,7 @@ main :: IO[()]
 main = do 
 	args <- getArgs
 	forM args (\arg -> case parseArith arg of
-				Left e -> print e 
+				Left err -> print err 
 				Right term -> print $ eval term)
 
 isNumerical :: Term -> Bool
