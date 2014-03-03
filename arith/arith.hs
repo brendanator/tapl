@@ -1,3 +1,5 @@
+import Control.Monad  
+import System.Environment   
 import Text.ParserCombinators.Parsec
 
 data Term = TmTrue
@@ -10,17 +12,18 @@ data Term = TmTrue
 		  | TmError
 	deriving Show
 	
+main :: IO[()]
 main = do 
-	contents <- getContents
-	case parseArith contents of
-		Left e -> do print e 
-		Right term -> do putStrLn $ show $ eval term
+	args <- getArgs
+	forM args (\arg -> case parseArith arg of
+				Left e -> print e 
+				Right term -> print $ eval term)
 
 isNumerical :: Term -> Bool
 isNumerical term = case term of
 	TmZero -> True
-	TmSucc term -> isNumerical term
-	TmPred term -> isNumerical term
+	TmSucc subterm -> isNumerical subterm
+	TmPred subterm -> isNumerical subterm
 	_ -> False
 
 eval :: Term -> Term
@@ -32,25 +35,37 @@ eval term = case term of
 		TmTrue -> eval term2
 		TmFalse -> eval term3
 		_ -> TmError
-	TmIsZero term -> case eval term of
+	TmIsZero subterm -> case eval subterm of
 		TmZero -> TmTrue
 		t2 | isNumerical t2 -> TmFalse
 		_ -> TmError
 	TmPred TmZero -> TmZero
-	TmPred (TmSucc term) -> eval term
-	TmSucc term -> case eval term of
+	TmPred (TmSucc subterm) -> eval subterm
+	TmSucc subterm -> case eval subterm of
 		t2 | isNumerical t2 -> TmSucc t2
 		_ -> TmError
 	_ -> TmError
 
-valueParser :: String -> Term -> GenParser Char st Term
-valueParser value term = string value >> return term
+parseArith :: String -> Either ParseError Term
+parseArith input = parse arithParser "Failed to parse arithmetic expression" input
 
-trueParser = valueParser "true" TmTrue
+arithParser :: GenParser Char st Term
+arithParser = try( ifParser ) 
+		  <|> try( succParser )
+		  <|> try( predParser )
+		  <|> try( isZeroParser ) 
+		  <|> try( trueParser )
+		  <|> try( falseParser )
+		  <|> try( zeroParser )
 
-falseParser = valueParser "false" TmFalse
+trueParser :: GenParser Char st Term
+trueParser = string "true" >> return TmTrue
 
-zeroParser = valueParser "0" TmZero
+falseParser :: GenParser Char st Term
+falseParser = string "false" >> return TmFalse
+
+zeroParser :: GenParser Char st Term
+zeroParser = char '0' >> return TmZero
 
 functionParser :: String -> (Term -> Term) -> GenParser Char st Term
 functionParser name funcTerm = do
@@ -59,8 +74,13 @@ functionParser name funcTerm = do
 	char ')'
 	return $ funcTerm term
 
+succParser :: GenParser Char st Term
 succParser = functionParser "succ" TmSucc
+
+predParser :: GenParser Char st Term
 predParser = functionParser "pred" TmPred
+
+isZeroParser :: GenParser Char st Term
 isZeroParser = functionParser "iszero" TmIsZero
 
 ifParser :: GenParser Char st Term
@@ -77,23 +97,3 @@ ifParser = do
 	spaces
 	term3 <- arithParser
 	return $ TmIf term1 term2 term3
-
-arithParser :: GenParser Char st Term
-arithParser = try( ifParser ) 
-		  <|> succParser 
-		  <|> predParser 
-		  <|> try ( isZeroParser ) 
-		  <|> trueParser 
-		  <|> falseParser 
-		  <|> zeroParser
-
-parseArith :: String -> Either ParseError Term
-parseArith input = parse arithParser "Failed to parse arithmetic expression" input
-
-
-
-
-
-
-
-
