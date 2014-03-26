@@ -1,4 +1,5 @@
-import Control.Monad (forM)
+import Control.Monad (forM_)
+import Control.Applicative hiding ((<|>))
 import System.Environment (getArgs)
 import Text.ParserCombinators.Parsec
 
@@ -12,10 +13,10 @@ data Term = TmTrue
 		  | TmError
 	deriving Show
 	
-main :: IO[()]
+main :: IO()
 main = do 
 	args <- getArgs
-	forM args (\arg -> case parseArith arg of
+	forM_ args (\arg -> case parseArith arg of
 				Left err -> print err 
 				Right term -> print $ eval term)
 
@@ -27,24 +28,35 @@ isNumerical term = case term of
 	_ -> False
 
 eval :: Term -> Term
-eval term = case term of 
-	TmTrue -> TmTrue
-	TmFalse -> TmFalse
-	TmZero -> TmZero
-	TmIf term1 term2 term3 -> case eval term1 of
-		TmTrue -> eval term2
-		TmFalse -> eval term3
-		_ -> TmError
-	TmIsZero subterm -> case eval subterm of
-		TmZero -> TmTrue
-		t2 | isNumerical t2 -> TmFalse
-		_ -> TmError
-	TmPred TmZero -> TmZero
-	TmPred (TmSucc subterm) -> eval subterm
-	TmSucc subterm -> case eval subterm of
-		t2 | isNumerical t2 -> TmSucc t2
-		_ -> TmError
-	_ -> TmError
+eval TmTrue = TmTrue
+eval TmFalse = TmFalse
+eval TmZero = TmZero
+eval (TmIf term1 term2 term3) = evalIf (eval term1) term2 term3
+eval (TmIsZero subterm) = evalIsZero $ eval subterm
+eval (TmPred subterm) = evalPred $ eval subterm
+eval (TmSucc subterm) = evalSucc $ eval subterm
+eval _ = TmError
+
+evalIf :: Term -> Term -> Term -> Term
+evalIf TmTrue a _ = eval a
+evalIf TmFalse _ b = eval b
+evalIf _ _ _ = TmError
+
+evalIsZero :: Term -> Term
+evalIsZero TmZero = TmTrue
+evalIsZero term 
+	| isNumerical term = TmFalse
+	| otherwise        = TmError
+
+evalPred :: Term -> Term
+evalPred TmZero = TmZero
+evalPred (TmSucc subterm) = eval subterm
+evalPred _ = TmError
+
+evalSucc :: Term -> Term
+evalSucc term
+	| isNumerical term = TmSucc term
+	| otherwise        = TmError
 
 parseArith :: String -> Either ParseError Term
 parseArith input = parse arithParser "Failed to parse arithmetic expression" input
@@ -56,7 +68,7 @@ arithParser = try( ifParser )
 		  <|> try( isZeroParser ) 
 		  <|> try( trueParser )
 		  <|> try( falseParser )
-		  <|> try( zeroParser )
+		  <|> zeroParser
 
 trueParser :: GenParser Char st Term
 trueParser = string "true" >> return TmTrue
@@ -68,11 +80,8 @@ zeroParser :: GenParser Char st Term
 zeroParser = char '0' >> return TmZero
 
 functionParser :: String -> (Term -> Term) -> GenParser Char st Term
-functionParser name funcTerm = do
-	string $ name ++ "(" 
-	term <- arithParser
-	char ')'
-	return $ funcTerm term
+functionParser name funcTerm = 
+	funcTerm <$> (string name *> char '(' *> spaces *> arithParser <* spaces <* char ')')
 
 succParser :: GenParser Char st Term
 succParser = functionParser "succ" TmSucc
@@ -84,16 +93,7 @@ isZeroParser :: GenParser Char st Term
 isZeroParser = functionParser "iszero" TmIsZero
 
 ifParser :: GenParser Char st Term
-ifParser = do
-	string "if"
-	spaces
-	term1 <- arithParser
-	spaces
-	string "then"
-	spaces
-	term2 <- arithParser
-	spaces
-	string "else"
-	spaces
-	term3 <- arithParser
-	return $ TmIf term1 term2 term3
+ifParser = 
+	TmIf <$> (string "if" *> spaces *> arithParser) 
+		 <*> (spaces *> string "then" *> spaces *> arithParser)
+		 <*> (spaces *> string "else" *> spaces *> arithParser)
